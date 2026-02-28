@@ -4,7 +4,7 @@
 
 ## 📋 功能介绍
 
-**LskyProUpload** 是一个 Typecho 插件，允许用户在文章/页面编辑器中**直接粘贴图片**，自动上传到兰空图床（Lsky Pro），并自动返回 Markdown 格式的图片链接。
+**LskyProUpload** 是一个 Typecho 插件，允许用户在文章/页面编辑器中**直接粘贴图片**，自动上传到兰空图床（Lsky Pro），并自动返回 Markdown 格式的图片链接，从isYangs的插件改版优化而来。
 
 ### ✨ 核心特性
 
