@@ -1,4 +1,4 @@
-# LskyProUpload Pro+ 插件
+# Lsky-Upload Pro 插件
 
 > Typecho 粘贴图片自动上传到兰空图床插件
 
