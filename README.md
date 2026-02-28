@@ -40,7 +40,7 @@
 3. 生成新的 Token
 4. 复制 Token 值粘贴到插件设置中
 
-![http测试工具](https://lsky.yeyhome.com:8443/i/2026/02/28/69a302711a4cc.png)
+<img width="1599" height="655" alt="e0368a5d363840c62178b8d8b265ad03_69a302711a4cc" src="https://github.com/user-attachments/assets/6c92f4e4-1ab1-42fc-86a1-9c08d69ffa2b" />
 
 ## 💡 使用方法
 
