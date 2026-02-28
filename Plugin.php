@@ -37,7 +37,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
 
     public static function config(Typecho_Widget_Helper_Form $form)
     {
-        $desc = new Typecho_Widget_Helper_Form_Element_Text('desc', NULL, '', '插件介绍：', '<p>本插件由isYangs基于泽泽站长的插件修改而来</p>');
+        $desc = new Typecho_Widget_Helper_Form_Element_Text('desc', NULL, '', '插件介绍：', '<p>本插件是在isYangs插件基础上修改而来</p>');
         $form->addInput($desc);
 
         $api = new Typecho_Widget_Helper_Form_Element_Text('api', NULL, '', 'Api：', '兰空图床 API 地址，示例：https://lsky.pro');
