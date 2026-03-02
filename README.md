@@ -16,6 +16,12 @@
 - ✅ **格式验证** - 自动验证文件格式，仅支持图片文件
 - 🎨 **兼容性强** - 支持 CodeMirror 编辑器、textarea、contenteditable 等多种编辑器
 
+<img width="1018" height="675" alt="fa0faa0b304a6e8b855002a7cf0f431f_69a53b292e6dd" src="https://github.com/user-attachments/assets/81a30c63-412c-4d7a-a7a6-0a812a07f08f" />
+
+<img width="827" height="439" alt="272986df2345016c14f368b1cd6209f6_69a53b508eb64" src="https://github.com/user-attachments/assets/1cbd4868-b3a6-4a3e-95de-f5bbd3777472" />
+
+
+
 ## 🚀 快速开始
 
 ### 1. 安装插件
