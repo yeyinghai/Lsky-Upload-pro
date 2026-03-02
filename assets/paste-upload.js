@@ -376,15 +376,15 @@ window.__LskyProUploadLoaded = true;
         if (editor.tagName === 'TEXTAREA') {
           // Textarea：用提前记录的光标位置插入
           const text = editor.value;
-          editor.value = text.slice(0, cursorPos) + response.data.markdown + text.slice(cursorPos);
+          editor.value = text.slice(0, cursorPos) + response.data.content + text.slice(cursorPos);
           editor.focus();
           editor.setSelectionRange(
-            cursorPos + response.data.markdown.length,
-            cursorPos + response.data.markdown.length
+            cursorPos + response.data.content.length,
+            cursorPos + response.data.content.length
           );
           editor.dispatchEvent(new Event('input', { bubbles: true }));
         } else {
-          insertMarkdown(editor, response.data.markdown, savedRange);
+          insertMarkdown(editor, response.data.content, savedRange);
         }
         showToast('图片上传成功', 'success');
       } else {
