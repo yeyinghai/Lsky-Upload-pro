@@ -11,24 +11,26 @@ use CURLFile;
  *
  * @package LskyProUpload pro+
  * @author yeying
- * @version 1.0.0
+ * @version 1.1.0
  * @link https://www.yeyhome.com
  */
 class LskyProUpload_Plugin implements Typecho_Plugin_Interface
 {
     const UPLOAD_DIR  = '/usr/uploads';
     const PLUGIN_NAME = 'LskyProUpload';
-    const IMAGE_EXTENSIONS = array('gif','jpg','jpeg','png','tiff','bmp','ico','psd','webp','JPG','BMP','GIF','PNG','JPEG','ICO','PSD','TIFF','WEBP');
+
+    // 修复：去掉冗余的大写扩展名（_getSafeName 已做 strtolower 处理）
+    const IMAGE_EXTENSIONS = ['gif', 'jpg', 'jpeg', 'png', 'tiff', 'bmp', 'ico', 'psd', 'webp'];
 
     public static function activate()
     {
-        Typecho_Plugin::factory('Widget_Upload')->uploadHandle     = array('LskyProUpload_Plugin', 'uploadHandle');
-        Typecho_Plugin::factory('Widget_Upload')->modifyHandle     = array('LskyProUpload_Plugin', 'modifyHandle');
-        Typecho_Plugin::factory('Widget_Upload')->deleteHandle     = array('LskyProUpload_Plugin', 'deleteHandle');
-        Typecho_Plugin::factory('Widget_Upload')->attachmentHandle = array('LskyProUpload_Plugin', 'attachmentHandle');
+        Typecho_Plugin::factory('Widget_Upload')->uploadHandle     = ['LskyProUpload_Plugin', 'uploadHandle'];
+        Typecho_Plugin::factory('Widget_Upload')->modifyHandle     = ['LskyProUpload_Plugin', 'modifyHandle'];
+        Typecho_Plugin::factory('Widget_Upload')->deleteHandle     = ['LskyProUpload_Plugin', 'deleteHandle'];
+        Typecho_Plugin::factory('Widget_Upload')->attachmentHandle = ['LskyProUpload_Plugin', 'attachmentHandle'];
 
-        Typecho_Plugin::factory('admin/write-post.php')->bottom = array('LskyProUpload_Plugin', 'injectScript');
-        Typecho_Plugin::factory('admin/write-page.php')->bottom = array('LskyProUpload_Plugin', 'injectScript');
+        Typecho_Plugin::factory('admin/write-post.php')->bottom = ['LskyProUpload_Plugin', 'injectScript'];
+        Typecho_Plugin::factory('admin/write-page.php')->bottom = ['LskyProUpload_Plugin', 'injectScript'];
     }
 
     public static function deactivate()
@@ -37,7 +39,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
 
     public static function config(Typecho_Widget_Helper_Form $form)
     {
-        $desc = new Typecho_Widget_Helper_Form_Element_Text('desc', NULL, '', '插件介绍：', '<p>本插件是在isYangs插件基础上修改而来</p>');
+        $desc = new Typecho_Widget_Helper_Form_Element_Text('desc', NULL, '', '插件介绍：', '<p>本插件由isYangs基于泽泽站长的插件修改而来</p>');
         $form->addInput($desc);
 
         $api = new Typecho_Widget_Helper_Form_Element_Text('api', NULL, '', 'Api：', '兰空图床 API 地址，示例：https://lsky.pro');
@@ -69,13 +71,19 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
      */
     public static function pasteUploadHandle()
     {
+        // 修复：增加登录鉴权，防止未授权用户滥用上传接口
+        $user = \Widget\User::alloc();
+        if (!$user->hasLogin()) {
+            self::jsonResponse(false, '未登录，无权上传');
+        }
+
         if (empty($_FILES['file'])) {
             self::jsonResponse(false, '未接收到文件');
         }
 
         $file = $_FILES['file'];
         $name = $file['name'];
-        $ext = self::_getSafeName($name);
+        $ext  = self::_getSafeName($name);
 
         if (!self::_isImage($ext)) {
             self::jsonResponse(false, '仅支持上传图片格式');
@@ -105,21 +113,21 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
 
         self::jsonResponse(true, '上传成功', [
             'markdown' => $markdown,
-            'url' => $result['path'],
-            'name' => $imageName
+            'url'      => $result['path'],
+            'name'     => $imageName
         ]);
     }
 
     /**
-     * JSON 响应
+     * JSON 响应辅助方法
      */
-    private static function jsonResponse($status, $message, $data = [])
+    private static function jsonResponse(bool $status, string $message, array $data = [])
     {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
-            'status' => $status,
+            'status'  => $status,
             'message' => $message,
-            'data' => $data
+            'data'    => $data
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -159,7 +167,9 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
         if (empty($file['name'])) {
             return false;
         }
+
         $ext = self::_getSafeName($file['name']);
+
         if ($content['attachment']->type != $ext || Common::isAppEngine()) {
             return false;
         }
@@ -178,18 +188,19 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
 
     public static function attachmentHandle(array $content): string
     {
+        // 修复：使用 pathinfo 获取扩展名，避免 substr 截断 webp/tiff/jpeg 等4位扩展名
         $arr = unserialize($content['text']);
-        $text = strstr($content['text'],'.');
-        $ext = substr($text,1,3);
+        $ext = strtolower(pathinfo($arr['path'] ?? '', PATHINFO_EXTENSION));
+
         if (self::_isImage($ext)) {
             return $content['attachment']->path ?? '';
         }
 
         $ret = explode(self::UPLOAD_DIR, $arr['path']);
-        return Common::url(self::UPLOAD_DIR . @$ret[1], Options::alloc()->siteUrl);
+        return Common::url(self::UPLOAD_DIR . ($ret[1] ?? ''), Options::alloc()->siteUrl);
     }
 
-    private static function _getUploadDir($ext = ''): string
+    private static function _getUploadDir(string $ext = ''): string
     {
         if (self::_isImage($ext)) {
             $url = parse_url(Options::alloc()->siteUrl);
@@ -198,19 +209,18 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
         } elseif (defined('__TYPECHO_UPLOAD_DIR__')) {
             return __TYPECHO_UPLOAD_DIR__;
         } else {
-            $path = Common::url(self::UPLOAD_DIR, __TYPECHO_ROOT_DIR__);
-            return $path;
+            return Common::url(self::UPLOAD_DIR, __TYPECHO_ROOT_DIR__);
         }
     }
 
-    private static function _getUploadFile($file): string
+    private static function _getUploadFile(array $file): string
     {
         return $file['tmp_name'] ?? ($file['bytes'] ?? ($file['bits'] ?? ''));
     }
 
-    private static function _getSafeName(&$name): string
+    private static function _getSafeName(string &$name): string
     {
-        $name = str_replace(array('\"', '<', '>'), '', $name);
+        $name = str_replace(['"', '<', '>'], '', $name);
         $name = str_replace('\\', '/', $name);
         $name = false === strpos($name, '/') ? ('a' . $name) : str_replace('/', '/a', $name);
         $info = pathinfo($name);
@@ -219,45 +229,29 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
         return isset($info['extension']) ? strtolower($info['extension']) : '';
     }
 
-    private static function _makeUploadDir($path): bool
+    /**
+     * 修复：简化目录创建，使用 mkdir 递归参数替代复杂递归逻辑
+     */
+    private static function _makeUploadDir(string $path): bool
     {
-        $path    = preg_replace("/\\\\+/", '/', $path);
-        $current = rtrim($path, '/');
-        $last    = $current;
-
-        while (!is_dir($current) && false !== strpos($path, '/')) {
-            $last    = $current;
-            $current = dirname($current);
-        }
-
-        if ($last == $current) {
-            return true;
-        }
-
-        if (!@mkdir($last)) {
-            return false;
-        }
-
-        $stat  = @stat($last);
-        $perms = $stat['mode'] & 0007777;
-        @chmod($last, $perms);
-
-        return self::_makeUploadDir($path);
+        return is_dir($path) || mkdir($path, 0755, true);
     }
 
-    private static function _isImage($ext): bool
+    private static function _isImage(string $ext): bool
     {
-        return in_array($ext, self::IMAGE_EXTENSIONS);
+        return in_array($ext, self::IMAGE_EXTENSIONS, true);
     }
 
-    private static function _uploadOtherFile($file, $ext)
+    private static function _uploadOtherFile(array $file, string $ext)
     {
         $dir = self::_getUploadDir($ext) . '/' . date('Y') . '/' . date('m');
+
         if (!self::_makeUploadDir($dir)) {
             return false;
         }
 
         $path = sprintf('%s/%u.%s', $dir, crc32(uniqid()), $ext);
+
         if (!isset($file['tmp_name']) || !@move_uploaded_file($file['tmp_name'], $path)) {
             return false;
         }
@@ -267,33 +261,40 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
             'path' => $path,
             'size' => $file['size'] ?? filesize($path),
             'type' => $ext,
-            'mime' => @Common::mimeContentType($path)
+            'mime' => Common::mimeContentType($path)
         ];
     }
 
-    private static function _uploadImg($file, $ext)
+    private static function _uploadImg(array $file, string $ext)
     {
-        $options = Options::alloc()->plugin(self::PLUGIN_NAME);
-        $api     = $options->api . '/api/v1/upload';
-        $token   = 'Bearer '.$options->token;
+        $options    = Options::alloc()->plugin(self::PLUGIN_NAME);
+        $api        = $options->api . '/api/v1/upload';
+        $token      = 'Bearer ' . $options->token;
         $strategyId = $options->strategy_id;
 
-        $tmp     = self::_getUploadFile($file);
+        $tmp = self::_getUploadFile($file);
         if (empty($tmp)) {
             return false;
         }
 
-        $img = $file['name'];
+        // 修复：使用系统临时目录生成安全的临时文件路径，避免在网站根目录创建文件
+        $img = tempnam(sys_get_temp_dir(), 'lsky_') . '.' . $ext;
+
         if (!rename($tmp, $img)) {
             return false;
         }
-        $params = ['file' => new CURLFile($img)];
-        if ($strategyId) {
+
+        $params = ['file' => new CURLFile($img, mime_content_type($img), $file['name'])];
+        if (!empty($strategyId)) {
             $params['strategy_id'] = $strategyId;
         }
 
-        $res = self::_curlPost($api, $params, $token);
-        unlink($img);
+        $res = self::_curlRequest('POST', $api, $params, $token);
+
+        // 确保临时文件被清理
+        if (file_exists($img)) {
+            unlink($img);
+        }
 
         if (!$res) {
             return false;
@@ -301,21 +302,22 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
 
         $json = json_decode($res, true);
 
-        if ($json['status'] === false) {
-            file_put_contents('./usr/plugins/'.self::PLUGIN_NAME.'/msg.log', json_encode($json, 256) . PHP_EOL, FILE_APPEND);
+        if (empty($json) || $json['status'] === false) {
+            // 修复：日志写入插件目录（非 Web 直接可访问路径，或改为 error_log）
+            error_log('[LskyProUpload] 上传失败: ' . json_encode($json, JSON_UNESCAPED_UNICODE));
             return false;
         }
 
         $data = $json['data'];
         return [
-            'img_key' => $data['key'],
-            'img_id' => $data['md5'],
-            'name'   => $data['origin_name'],
-            'path'   => $data['links']['url'],
-            'size'   => $data['size']*1024,
-            'type'   => $data['extension'],
-            'mime'   => $data['mimetype'],
-            'description'  => $data['mimetype'],
+            'img_key'     => $data['key'],
+            'img_id'      => $data['md5'],
+            'name'        => $data['origin_name'],
+            'path'        => $data['links']['url'],
+            'size'        => $data['size'] * 1024,
+            'type'        => $data['extension'],
+            'mime'        => $data['mimetype'],
+            'description' => $data['mimetype'],
         ];
     }
 
@@ -323,74 +325,60 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
     {
         $options = Options::alloc()->plugin(self::PLUGIN_NAME);
         $api     = $options->api . '/api/v1/images';
-        $token   = 'Bearer '.$options->token;
-
-        $id = $content['attachment']->img_key;
+        $token   = 'Bearer ' . $options->token;
+        $id      = $content['attachment']->img_key ?? '';
 
         if (empty($id)) {
             return false;
         }
 
-        $res  = self::_curlDelete($api . '/' . $id, ['key' => $id], $token);
+        $res  = self::_curlRequest('DELETE', $api . '/' . $id, ['key' => $id], $token);
         $json = json_decode($res, true);
 
-        if (!is_array($json)) {
-            return false;
+        // 修复：检查 API 返回的实际状态，而不是仅判断响应是否为数组
+        return is_array($json) && ($json['status'] === true);
+    }
+
+    /**
+     * 修复：合并 _curlPost 和 _curlDelete 为统一的 cURL 请求方法，消除重复代码，并增加超时设置
+     */
+    private static function _curlRequest(string $method, string $api, array $post, string $token)
+    {
+        $headers = [
+            'Content-Type: multipart/form-data',
+            'Accept: application/json',
+            'Authorization: ' . $token,
+        ];
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $api,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_CUSTOMREQUEST  => strtoupper($method),
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $post,
+            CURLOPT_CONNECTTIMEOUT => 10,   // 新增：连接超时 10 秒
+            CURLOPT_TIMEOUT        => 60,   // 新增：总超时 60 秒
+            CURLOPT_USERAGENT      => 'LskyProUpload/' . '1.1.0',
+        ]);
+
+        $res = curl_exec($ch);
+
+        if (curl_errno($ch)) {
+            error_log('[LskyProUpload] cURL 错误: ' . curl_error($ch));
         }
 
-        return true;
-    }
-
-    private static function _curlDelete($api, $post, $token)
-    {
-        $headers = array(
-            "Content-Type: multipart/form-data",
-            "Accept: application/json",
-            "Authorization: ".$token,
-        );
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $api);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36');
-        curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
-        $res = curl_exec($ch);
         curl_close($ch);
-
-        return $res;
-    }
-
-    private static function _curlPost($api, $post, $token)
-    {
-        $headers = array(
-            "Content-Type: multipart/form-data",
-            "Accept: application/json",
-            "Authorization: ".$token,
-        );
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $api);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36');
-        curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
-        $res = curl_exec($ch);
-        curl_close($ch);
-
         return $res;
     }
 }
 
 /**
- * AJAX 粘贴上传处理
+ * AJAX 粘贴上传处理入口
  */
 if (isset($_GET['action']) && $_GET['action'] === 'lsky_paste_upload' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     while (ob_get_level()) {
