@@ -409,7 +409,9 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
 
   <!-- ── Banner ── -->
   <div class="lsky-banner">
-    <div class="lsky-banner-icon">️</div>
+    <div class="lsky-banner-icon">
+        <img src="/usr/plugins/LskyProUpload/assets/icon.png" width="64" height="64" alt="">
+    </div>
     <div class="lsky-banner-info">
       <p class="lsky-banner-title">LskyPro Upload</p>
       <p class="lsky-banner-desc">粘贴图片自动上传至兰空图床，支持 Markdown、HTML、BBCode、URL 四种插入格式</p>
