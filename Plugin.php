@@ -397,7 +397,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
 
   <!-- ── Banner ── -->
   <div class="lsky-banner">
-    <div class="lsky-banner-icon">🏔️</div>
+    <div class="lsky-banner-icon">️</div>
     <div class="lsky-banner-info">
       <p class="lsky-banner-title">LskyPro Upload</p>
       <p class="lsky-banner-desc">粘贴图片自动上传至兰空图床，支持 Markdown、HTML、BBCode、URL 四种插入格式</p>
@@ -408,7 +408,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
   <!-- ── Section 1: API 配置 ── -->
   <div class="lsky-card">
     <div class="lsky-card-head">
-      <div class="lsky-card-head-icon" style="background:#eff6ff;">🔗</div>
+      <div class="lsky-card-head-icon" style="background:#eff6ff;"></div>
       <div class="lsky-card-head-text">
         <h3>API 配置</h3>
         <p>填写兰空图床的接口地址与鉴权 Token</p>
@@ -418,7 +418,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
       <div class="lsky-field">
         <label>API 地址 <span class="lsky-required">*</span></label>
         <div class="lsky-input-wrap">
-          <span class="lsky-input-prefix">🌐</span>
+          <span class="lsky-input-prefix"></span>
           <input class="lsky-input" id="lskyApiInput" type="text"
                  placeholder="https://lsky.pro" value="{$vApi}" autocomplete="off">
         </div>
@@ -427,7 +427,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
       <div class="lsky-field">
         <label>Token <span class="lsky-required">*</span></label>
         <div class="lsky-input-wrap">
-          <span class="lsky-input-prefix">🔑</span>
+          <span class="lsky-input-prefix"></span>
           <input class="lsky-input" id="lskyTokenInput" type="text"
                  placeholder="请输入 API Token" value="{$vToken}" autocomplete="new-password">
         </div>
@@ -439,7 +439,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
   <!-- ── Section 2: 存储策略 ── -->
   <div class="lsky-card">
     <div class="lsky-card-head">
-      <div class="lsky-card-head-icon" style="background:#f0fdf4;">🗂️</div>
+      <div class="lsky-card-head-icon" style="background:#f0fdf4;">️</div>
       <div class="lsky-card-head-text">
         <h3>存储策略</h3>
         <p>指定上传时使用的存储策略（可选）</p>
@@ -449,7 +449,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
       <div class="lsky-field" style="margin-bottom:0;">
         <label>Strategy ID <span class="lsky-optional">可选</span></label>
         <div class="lsky-input-wrap">
-          <span class="lsky-input-prefix">🔢</span>
+          <span class="lsky-input-prefix"></span>
           <input class="lsky-input" id="lskyStratInput" type="text"
                  placeholder="留空则使用默认策略" value="{$vStrat}" autocomplete="off">
         </div>
