@@ -31,6 +31,8 @@ use CURLFile;
  *  - [质量] IMAGE_EXTENSIONS 去除冗余大写（_getSafeName 已 strtolower）
  *  - [质量] _makeUploadDir 简化为 mkdir 递归模式
  *  - [质量] _getSafeName 拆分为 _sanitizeName + _getExtension，消除引用传参副作用
+ *  - [修复] config() 用 try/catch 包裹 plugin() 调用，彻底解决首次激活报"配置信息没有找到"的问题
+ *  - [修复] activate() 返回提示字符串，确保首次激活流程正常
  */
 class LskyProUpload_Plugin implements Typecho_Plugin_Interface
 {
@@ -61,6 +63,9 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
 
         Typecho_Plugin::factory('admin/write-post.php')->bottom = ['LskyProUpload_Plugin', 'injectScript'];
         Typecho_Plugin::factory('admin/write-page.php')->bottom = ['LskyProUpload_Plugin', 'injectScript'];
+
+        // 首次激活时返回提示字符串，Typecho 会将其显示为激活成功提示
+        return _t('请前往 <a href="options-plugin.php?config=LskyProUpload">插件设置</a> 填写图床 API 信息');
     }
 
     public static function deactivate() {}
@@ -79,8 +84,15 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
         $form->addInput($strategy);
         $form->addInput($format);
 
-        // 读取已保存的值，用于自定义 UI 回显
-        $opts   = Options::alloc()->plugin(self::PLUGIN_NAME);
+        // 修复：Typecho 的 plugin() 在配置不存在时会抛出 Typecho_Plugin_Exception，
+        // 必须用 try/catch 捕获，is_object() 判断拦不住异常。
+        $opts = null;
+        try {
+            $opts = Options::alloc()->plugin(self::PLUGIN_NAME);
+        } catch (Exception $e) {
+            // 首次激活时配置尚未写入数据库，忽略异常，使用默认空值
+        }
+
         $vApi   = htmlspecialchars($opts->api         ?? '', ENT_QUOTES);
         $vToken = htmlspecialchars($opts->token       ?? '', ENT_QUOTES);
         $vStrat = htmlspecialchars($opts->strategy_id ?? '', ENT_QUOTES);
@@ -734,7 +746,6 @@ HTML;
         }
 
         $path = $content['attachment']->path;
-        // 修复：删除前先检查文件是否存在，避免产生 PHP Warning
         return file_exists($path) && unlink($path);
     }
 
@@ -756,7 +767,6 @@ HTML;
         }
 
         if (self::_isImage($ext)) {
-            // 修复：先上传新图，成功后再删除旧图，避免上传失败导致旧图永久丢失
             $newResult = self::_uploadImg($file, $ext);
             if ($newResult) {
                 self::_deleteImg($content);
@@ -769,8 +779,6 @@ HTML;
 
     public static function attachmentHandle(array $content): string
     {
-        // 修复：使用 pathinfo 获取扩展名，避免 substr 截断 webp/tiff/jpeg 等
-        // 修复：unserialize 失败时返回 false，需做类型校验避免 PHP Warning
         $arr = unserialize($content['text']);
         if (!is_array($arr) || empty($arr['path'])) {
             return $content['attachment']->path ?? '';
@@ -790,12 +798,17 @@ HTML;
     // 私有辅助方法
     // -------------------------------------------------------------------------
 
-    /**
-     * 根据后台配置的格式，将图片名和 URL 格式化为对应的插入文本
-     */
     private static function _formatContent(string $name, string $url): string
     {
-        $format = Options::alloc()->plugin(self::PLUGIN_NAME)->format ?? 'markdown';
+        $opts   = null;
+        $format = 'markdown';
+        try {
+            $opts   = Options::alloc()->plugin(self::PLUGIN_NAME);
+            $format = $opts->format ?? 'markdown';
+        } catch (Exception $e) {
+            // 配置读取失败时使用默认格式
+        }
+
         switch ($format) {
             case 'url':
                 return $url;
@@ -809,12 +822,13 @@ HTML;
         }
     }
 
-    /**
-     * 校验插件配置是否完整，返回错误信息或 null
-     */
     private static function _validateConfig(): ?string
     {
-        $options = Options::alloc()->plugin(self::PLUGIN_NAME);
+        try {
+            $options = Options::alloc()->plugin(self::PLUGIN_NAME);
+        } catch (Exception $e) {
+            return '插件配置未初始化，请先保存一次插件设置';
+        }
         if (empty($options->api)) {
             return '请先在插件设置中填写 API 地址';
         }
@@ -824,13 +838,9 @@ HTML;
         return null;
     }
 
-    /**
-     * 校验文件真实 MIME 类型（防止 MIME 欺骗）
-     */
     private static function _isRealImage(string $tmpPath): bool
     {
         if (!function_exists('finfo_open')) {
-            // 若 finfo 不可用，降级为 getimagesize 校验
             return @getimagesize($tmpPath) !== false;
         }
         $finfo = new finfo(FILEINFO_MIME_TYPE);
@@ -838,9 +848,6 @@ HTML;
         return in_array($mime, self::IMAGE_MIMES, true);
     }
 
-    /**
-     * 净化文件名（去除危险字符，返回无扩展名的安全文件名）
-     */
     private static function _sanitizeName(string $name): string
     {
         $name = str_replace(['"', '<', '>', '\\', '/', "\0"], '', $name);
@@ -848,9 +855,6 @@ HTML;
         return $name ?: 'image';
     }
 
-    /**
-     * 提取并返回小写扩展名
-     */
     private static function _getExtension(string $name): string
     {
         $name = str_replace('\\', '/', $name);
@@ -880,9 +884,6 @@ HTML;
         return Common::url(self::UPLOAD_DIR, __TYPECHO_ROOT_DIR__);
     }
 
-    /**
-     * 简化版目录创建（利用 mkdir 的 recursive 参数）
-     */
     private static function _makeUploadDir(string $path): bool
     {
         return is_dir($path) || mkdir($path, 0755, true);
@@ -913,7 +914,12 @@ HTML;
 
     private static function _uploadImg(array $file, string $ext)
     {
-        $options    = Options::alloc()->plugin(self::PLUGIN_NAME);
+        try {
+            $options = Options::alloc()->plugin(self::PLUGIN_NAME);
+        } catch (Exception $e) {
+            return false;
+        }
+
         $api        = rtrim($options->api, '/') . '/api/v1/upload';
         $token      = 'Bearer ' . $options->token;
         $strategyId = $options->strategy_id ?? '';
@@ -923,18 +929,14 @@ HTML;
             return false;
         }
 
-        // 使用系统临时目录，避免在 Web 可访问目录创建文件
-        // tempnam() 会创建一个占位文件（无扩展名），我们只需要它生成的唯一路径，
-        // 再附加扩展名作为实际文件路径，并立即删除占位文件，避免临时文件泄露
         $tmpBase = tempnam(sys_get_temp_dir(), 'lsky_');
         $img     = $tmpBase . '.' . $ext;
-        @unlink($tmpBase); // 删除 tempnam 创建的占位文件
+        @unlink($tmpBase);
 
         if (!rename($tmp, $img)) {
             return false;
         }
 
-        // 获取 MIME 类型（与 _isRealImage 保持一致，兼容未安装 fileinfo 扩展的环境）
         if (function_exists('finfo_open')) {
             $mime = (new finfo(FILEINFO_MIME_TYPE))->file($img);
         } else {
@@ -948,7 +950,6 @@ HTML;
 
         $res = self::_curlRequest('POST', $api, $params, $token);
 
-        // 确保临时文件被清理
         if (file_exists($img)) {
             unlink($img);
         }
@@ -959,7 +960,6 @@ HTML;
 
         $json = json_decode($res, true);
 
-        // 修复：用 empty() 替代 === false，同时捕获 status 为 0/null/false 的情况
         if (empty($json) || empty($json['status'])) {
             error_log('[LskyProUpload] 上传失败: ' . json_encode($json, JSON_UNESCAPED_UNICODE));
             return false;
@@ -971,7 +971,7 @@ HTML;
             'img_id'      => $data['md5'],
             'name'        => $data['origin_name'],
             'path'        => $data['links']['url'],
-            'size'        => $data['size'],       // 修复：兰空 API 返回单位为字节，无需 *1024
+            'size'        => $data['size'],
             'type'        => $data['extension'],
             'mime'        => $data['mimetype'],
             'description' => $data['mimetype'],
@@ -980,10 +980,15 @@ HTML;
 
     private static function _deleteImg(array $content): bool
     {
-        $options = Options::alloc()->plugin(self::PLUGIN_NAME);
-        $api     = rtrim($options->api, '/') . '/api/v1/images';
-        $token   = 'Bearer ' . $options->token;
-        $id      = $content['attachment']->img_key ?? '';
+        try {
+            $options = Options::alloc()->plugin(self::PLUGIN_NAME);
+        } catch (Exception $e) {
+            return false;
+        }
+
+        $api   = rtrim($options->api, '/') . '/api/v1/images';
+        $token = 'Bearer ' . $options->token;
+        $id    = $content['attachment']->img_key ?? '';
 
         if (empty($id)) {
             return false;
@@ -995,15 +1000,6 @@ HTML;
         return is_array($json) && ($json['status'] === true);
     }
 
-    /**
-     * 统一 cURL 请求方法（合并原 _curlPost / _curlDelete，增加超时 & SSL 校验）
-     *
-     * @param string $method  HTTP 方法，如 POST / DELETE
-     * @param string $api     请求 URL
-     * @param array  $post    请求体数据
-     * @param string $token   Bearer Token
-     * @return string|false   响应内容，失败返回 false
-     */
     private static function _curlRequest(string $method, string $api, array $post, string $token)
     {
         $headers = [
@@ -1015,14 +1011,12 @@ HTML;
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL            => $api,
-            // 修复：启用 SSL 证书验证，防止中间人攻击
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_CUSTOMREQUEST  => strtoupper($method),
-            // 修复：仅 POST 请求才设置 CURLOPT_POST，避免与 CURLOPT_CUSTOMREQUEST=DELETE 冲突
             CURLOPT_POST           => strtoupper($method) === 'POST',
             CURLOPT_POSTFIELDS     => $post,
             CURLOPT_CONNECTTIMEOUT => 10,
@@ -1041,7 +1035,6 @@ HTML;
 
         curl_close($ch);
 
-        // 修复：非 2xx 响应视为失败
         if ($httpCode < 200 || $httpCode >= 300) {
             error_log('[LskyProUpload] HTTP 错误 ' . $httpCode . ' (' . $method . ' ' . $api . ')');
             return false;
@@ -1050,9 +1043,6 @@ HTML;
         return $res;
     }
 
-    /**
-     * 输出 JSON 响应并终止脚本
-     */
     private static function jsonResponse(bool $status, string $message, array $data = [])
     {
         header('Content-Type: application/json; charset=utf-8');
